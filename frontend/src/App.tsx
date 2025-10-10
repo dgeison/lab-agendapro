@@ -7,6 +7,8 @@ import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import ServicesPage from './pages/ServicesPage';
 import PublicBookingPage from './pages/PublicBookingPage';
+import GoogleCalendarSettingsPage from './pages/GoogleCalendarSettingsPage';
+import GoogleCallbackPage from './pages/GoogleCallbackPage';
 import './index.css';
 
 const AppRoutes: React.FC = () => {
@@ -22,6 +24,7 @@ const AppRoutes: React.FC = () => {
       />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/public/:slug" element={<PublicBookingPage />} />
       <Route path="/book/:slug" element={<PublicBookingPage />} />
       <Route
         path="/dashboard"
@@ -32,10 +35,34 @@ const AppRoutes: React.FC = () => {
         }
       />
       <Route
+        path="/dashboard/google-calendar"
+        element={
+          <ProtectedRoute>
+            <GoogleCalendarSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/services"
         element={
           <ProtectedRoute>
             <ServicesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/google-calendar"
+        element={
+          <ProtectedRoute>
+            <GoogleCalendarSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/auth/google/callback"
+        element={
+          <ProtectedRoute>
+            <GoogleCallbackPage />
           </ProtectedRoute>
         }
       />

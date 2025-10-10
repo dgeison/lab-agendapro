@@ -73,9 +73,15 @@ const DashboardPage: React.FC = () => {
                     Ir para Serviços
                   </button>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h4 className="text-lg font-medium text-gray-900 mb-2">Próximo: Google Calendar</h4>
-                  <p className="text-gray-600 text-sm">Conecte sua agenda do Google</p>
+                <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">Google Calendar</h4>
+                  <p className="text-gray-600 text-sm mb-4">Conecte sua agenda do Google</p>
+                  <button
+                    onClick={() => window.location.href = '/dashboard/google-calendar'}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Configurar Google Calendar
+                  </button>
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h4 className="text-lg font-medium text-gray-900 mb-2">Próximo: Pagamentos</h4>

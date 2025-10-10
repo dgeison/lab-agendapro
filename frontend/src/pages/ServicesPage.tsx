@@ -9,6 +9,7 @@ const ServicesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ServiceCreate>({
     name: '',
     description: '',
@@ -17,6 +18,8 @@ const ServicesPage: React.FC = () => {
   });
   const [editFormData, setEditFormData] = useState<ServiceUpdate>({});
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadServices();
@@ -25,13 +28,29 @@ const ServicesPage: React.FC = () => {
   const loadServices = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await servicesService.getMyServices();
       setServices(data);
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
+      setError('Erro ao carregar serviços. Tente novamente.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const showMessage = (message: string, type: 'success' | 'error') => {
+    if (type === 'success') {
+      setSuccess(message);
+      setError(null);
+    } else {
+      setError(message);
+      setSuccess(null);
+    }
+    setTimeout(() => {
+      setSuccess(null);
+      setError(null);
+    }, 5000);
   };
 
   const handleCreateService = async (e: React.FormEvent) => {
@@ -43,8 +62,10 @@ const ServicesPage: React.FC = () => {
       setFormData({ name: '', description: '', duration_minutes: 60, price: 0 });
       setShowCreateForm(false);
       await loadServices();
+      showMessage('Serviço criado com sucesso!', 'success');
     } catch (error) {
       console.error('Erro ao criar serviço:', error);
+      showMessage('Erro ao criar serviço. Tente novamente.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -52,11 +73,16 @@ const ServicesPage: React.FC = () => {
 
   const handleDeleteService = async (serviceId: string) => {
     if (window.confirm('Tem certeza que deseja deletar este serviço?')) {
+      setDeletingId(serviceId);
       try {
         await servicesService.deleteService(serviceId);
         await loadServices();
+        showMessage('Serviço deletado com sucesso!', 'success');
       } catch (error) {
         console.error('Erro ao deletar serviço:', error);
+        showMessage('Erro ao deletar serviço. Tente novamente.', 'error');
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -81,8 +107,10 @@ const ServicesPage: React.FC = () => {
       setEditingService(null);
       setEditFormData({});
       await loadServices();
+      showMessage('Serviço atualizado com sucesso!', 'success');
     } catch (error) {
       console.error('Erro ao atualizar serviço:', error);
+      showMessage('Erro ao atualizar serviço. Tente novamente.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -114,272 +142,281 @@ const ServicesPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">AgendaPro</h1>
+          <div className="flex justify-between items-center py-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Meus Serviços</h1>
+              <p className="text-gray-600">Gerencie os serviços que você oferece</p>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Olá, {user?.full_name || user?.email}</span>
-              <button
-                onClick={() => window.location.href = '/dashboard'}
-                className="text-primary-600 hover:text-primary-700 px-3 py-2 rounded-md text-sm font-medium"
-              >
-                Dashboard
-              </button>
+              <span className="text-sm text-gray-600">Olá, {user?.full_name}</span>
               <button
                 onClick={logout}
-                className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="text-sm text-red-600 hover:text-red-800"
               >
                 Sair
               </button>
             </div>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Meus Serviços</h2>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Mensagens */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+            {success}
+          </div>
+        )}
+
+        {/* Botão Criar Serviço */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {showCreateForm ? 'Cancelar' : '+ Novo Serviço'}
+          </button>
+        </div>
+
+        {/* Formulário de Criação */}
+        {showCreateForm && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Criar Novo Serviço</h2>
+            <form onSubmit={handleCreateService} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome do Serviço *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: Consulta, Aula particular, etc."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descrição
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Descreva o serviço..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Duração (minutos) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="15"
+                    max="480"
+                    value={formData.duration_minutes}
+                    onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Preço (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {submitting ? 'Criando...' : 'Criar Serviço'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Lista de Serviços */}
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Carregando serviços...</p>
+          </div>
+        ) : services.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">🛠️</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum serviço encontrado</h3>
+            <p className="text-gray-600 mb-4">Comece criando seu primeiro serviço</p>
             <button
               onClick={() => setShowCreateForm(true)}
-              className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
             >
-              + Novo Serviço
+              Criar Primeiro Serviço
             </button>
           </div>
-
-          {/* Create Service Form */}
-          {showCreateForm && (
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Criar Novo Serviço</h3>
-              <form onSubmit={handleCreateService}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nome do Serviço *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Ex: Consulta, Aula particular, etc."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Duração (minutos) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="15"
-                      max="480"
-                      value={formData.duration_minutes}
-                      onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Preço (R$) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="0.01"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Descrição
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Descreva detalhes sobre o serviço..."
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateForm(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    {submitting ? 'Criando...' : 'Criar Serviço'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* Edit Service Modal */}
-          {editingService && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Editar Serviço</h3>
-                <form onSubmit={handleUpdateService}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {services.map((service) => (
+              <div key={service.id} className="bg-white rounded-lg shadow-md p-6">
+                {editingService?.id === service.id ? (
+                  /* Formulário de Edição */
+                  <form onSubmit={handleUpdateService} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Nome do Serviço *
-                      </label>
                       <input
                         type="text"
                         required
                         value={editFormData.name || ''}
                         onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="Ex: Consulta, Aula particular, etc."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <textarea
+                        value={editFormData.description || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={2}
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Duração (minutos) *
-                      </label>
+                    <div className="grid grid-cols-2 gap-2">
                       <input
                         type="number"
                         required
                         min="15"
-                        max="480"
-                        value={editFormData.duration_minutes || 60}
-                        onChange={(e) => setEditFormData({ ...editFormData, duration_minutes: parseInt(e.target.value) || 60 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                        value={editFormData.duration_minutes || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, duration_minutes: parseInt(e.target.value) })}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Preço (R$) *
-                      </label>
                       <input
                         type="number"
                         required
                         min="0"
                         step="0.01"
-                        value={editFormData.price || 0}
-                        onChange={(e) => setEditFormData({ ...editFormData, price: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="0.00"
+                        value={editFormData.price || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, price: parseFloat(e.target.value) })}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Descrição
-                      </label>
-                      <textarea
-                        value={editFormData.description || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="Descreva detalhes sobre o serviço..."
-                      />
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {submitting ? 'Salvando...' : 'Salvar'}
+                      </button>
                     </div>
-                  </div>
+                  </form>
+                ) : (
+                  /* Visualização do Serviço */
+                  <>
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900">{service.name}</h3>
+                      {service.description && (
+                        <p className="text-gray-600 text-sm mt-1">{service.description}</p>
+                      )}
+                    </div>
 
-                  <div className="flex justify-end space-x-3 mt-6">
-                    <button
-                      type="button"
-                      onClick={cancelEdit}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-                    >
-                      {submitting ? 'Salvando...' : 'Salvar Alterações'}
-                    </button>
-                  </div>
-                </form>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Duração:</span>
+                        <span className="font-medium">{formatDuration(service.duration_minutes)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Preço:</span>
+                        <span className="font-medium text-green-600">{formatPrice(service.price)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => handleEditService(service)}
+                        className="px-3 py-1 text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDeleteService(service.id)}
+                        disabled={deletingId === service.id}
+                        className="px-3 py-1 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {deletingId === service.id ? 'Deletando...' : 'Deletar'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        )}
 
-          {/* Services List */}
-          {loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-2 text-gray-600">Carregando serviços...</p>
+        {/* Informações da Página Pública */}
+        {services.length > 0 && (
+          <div className="mt-12 bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-2">
+              Sua Página Pública de Agendamentos
+            </h3>
+            <p className="text-blue-700 mb-3">
+              Compartilhe o link abaixo com seus clientes para que eles possam agendar serviços:
+            </p>
+            <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-sm">
+              {window.location.origin}/public/{user?.public_slug}
             </div>
-          ) : services.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600">Nenhum serviço cadastrado ainda.</p>
-              <p className="text-sm text-gray-500 mt-1">
-                Crie seu primeiro serviço para começar a receber agendamentos!
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {services.map((service) => (
-                <div key={service.id} className="bg-white shadow rounded-lg p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">{service.name}</h3>
-                    <button
-                      onClick={() => handleDeleteService(service.id)}
-                      className="text-red-600 hover:text-red-700 text-sm"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                  
-                  {service.description && (
-                    <p className="text-gray-600 text-sm mb-3">{service.description}</p>
-                  )}
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Duração:</span>
-                      <span className="text-sm font-medium">{formatDuration(service.duration_minutes)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Preço:</span>
-                      <span className="text-sm font-medium text-primary-600">{formatPrice(service.price)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <button 
-                      onClick={() => handleEditService(service)}
-                      className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                    >
-                      Editar Serviço
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/public/${user?.public_slug}`);
+                showMessage('Link copiado para a área de transferência!', 'success');
+              }}
+              className="mt-3 text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Copiar Link
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

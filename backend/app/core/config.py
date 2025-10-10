@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
+    # Google Calendar Configuration
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    
+    # Frontend URL
+    frontend_url: str = "http://localhost:5174"
+    
     # API Configuration
     api_v1_str: str = "/api/v1"
     project_name: str = "AgendaPro API"
