@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.auth import UserSignup, UserLogin, AuthResponse, UserResponse
-from app.services.auth_service_simple import signup_user_simple, login_user_simple
+from app.services.auth_service import signup_user, login_user
 from app.core.security import get_current_user
 import logging
 
@@ -16,7 +16,7 @@ async def signup(user_data: UserSignup):
     """Endpoint para registro de novos usuários."""
     logger.info(f"Tentativa de signup para email: {user_data.email}")
     try:
-        result = await signup_user_simple(user_data)
+        result = await signup_user(user_data)
         logger.info(f"Signup bem-sucedido para: {user_data.email}")
         return result
     except Exception as e:
@@ -27,7 +27,7 @@ async def signup(user_data: UserSignup):
 @router.post("/login", response_model=AuthResponse)
 async def login(user_data: UserLogin):
     """Endpoint para login de usuários."""
-    return await login_user_simple(user_data)
+    return await login_user(user_data)
 
 
 @router.get("/me", response_model=UserResponse)

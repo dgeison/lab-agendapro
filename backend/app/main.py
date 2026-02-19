@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import auth, test, services, public, appointments, setup, setup, google_calendar
+from app.routers import auth, test, services, public, appointments, setup, google_calendar, students
 
 # Criar instância do FastAPI
 app = FastAPI(
@@ -47,6 +47,7 @@ app.include_router(public.router, prefix=settings.api_v1_str)
 app.include_router(appointments.router, prefix=settings.api_v1_str)
 app.include_router(setup.router, prefix=settings.api_v1_str)
 app.include_router(google_calendar.router, prefix=settings.api_v1_str)
+app.include_router(students.router, prefix=settings.api_v1_str)
 
 
 @app.get("/")

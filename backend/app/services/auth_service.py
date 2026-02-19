@@ -61,6 +61,7 @@ async def signup_user(user_data: UserSignup) -> AuthResponse:
         profile_data = {
             "id": user_id,
             "full_name": user_data.full_name,
+            "email": user_data.email,
             "public_slug": public_slug
         }
         

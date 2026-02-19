@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
-from app.core.supabase import supabase
+from app.core.supabase import supabase_admin
 
 security = HTTPBearer()
 
@@ -45,16 +45,21 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     """Dependency para obter usuário atual através do token JWT."""
     token = credentials.credentials
     user_id = verify_token(token)
-    
-    # Buscar dados do usuário no Supabase
+
     try:
-        response = supabase.table("user_profiles").select("*").eq("id", user_id).execute()
-        if not response.data:
+        # Buscar perfil na tabela profiles
+        profile_response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
+        if not profile_response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuário não encontrado"
+                detail="Perfil não encontrado"
             )
-        return response.data[0]
+        profile = profile_response.data[0]
+        # Garantir que o campo id está presente
+        profile["id"] = user_id
+        return profile
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
