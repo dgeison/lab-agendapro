@@ -1,10 +1,37 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * StudentsPage — Mini-CRM de Alunos do Professor.
+ *
+ * Features:
+ *   - Busca local por nome
+ *   - Cards com Nome, Email, Telefone, Notas
+ *   - Modal de Criar/Editar aluno
+ *   - Excluir com confirmação
+ *   - Loading, empty state, contadores
+ */
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+    ArrowLeft, Plus, Search, Pencil, Trash2, X, Loader2,
+    User, Mail, Phone, StickyNote, Users, Save, AlertTriangle,
+} from 'lucide-react';
 import { studentsService, Student, CreateStudentData } from '../services/studentsService';
 
+// ── Component ────────────────────────────────────────────────
+
 const StudentsPage: React.FC = () => {
+    const navigate = useNavigate();
+
+    // Data
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    // Search
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Modal
     const [showModal, setShowModal] = useState(false);
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [formData, setFormData] = useState<CreateStudentData>({
         full_name: '',
         email: '',
@@ -12,220 +39,445 @@ const StudentsPage: React.FC = () => {
         notes: '',
     });
     const [submitLoading, setSubmitLoading] = useState(false);
+    const [submitError, setSubmitError] = useState('');
 
-    useEffect(() => {
-        fetchStudents();
-    }, []);
+    // Delete confirmation
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
-    const fetchStudents = async () => {
+    // ── Fetch ────────────────────────────────────────────────
+    const fetchStudents = useCallback(async () => {
         try {
+            setLoading(true);
+            setError('');
             const data = await studentsService.getAll();
             setStudents(data);
-        } catch (error) {
-            console.error('Erro ao buscar alunos:', error);
+        } catch {
+            setError('Erro ao carregar alunos.');
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    useEffect(() => {
+        fetchStudents();
+    }, [fetchStudents]);
+
+    // ── Filtered list ────────────────────────────────────────
+    const filtered = searchQuery.trim()
+        ? students.filter((s) =>
+            s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (s.email && s.email.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+        : students;
+
+    // ── Modal handlers ───────────────────────────────────────
+    const openCreateModal = () => {
+        setEditingStudent(null);
+        setFormData({ full_name: '', email: '', phone: '', notes: '' });
+        setSubmitError('');
+        setShowModal(true);
+    };
+
+    const openEditModal = (student: Student) => {
+        setEditingStudent(student);
+        setFormData({
+            full_name: student.full_name,
+            email: student.email || '',
+            phone: student.phone || '',
+            notes: student.notes || '',
+        });
+        setSubmitError('');
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingStudent(null);
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.full_name.trim()) return;
+
         setSubmitLoading(true);
+        setSubmitError('');
+
         try {
-            await studentsService.create(formData);
-            setShowModal(false);
-            setFormData({ full_name: '', email: '', phone: '', notes: '' });
+            if (editingStudent) {
+                await studentsService.update(editingStudent.id, formData);
+            } else {
+                await studentsService.create(formData);
+            }
+            closeModal();
             fetchStudents();
-        } catch (error) {
-            console.error('Erro ao criar aluno:', error);
-            alert('Erro ao criar aluno. Verifique os dados.');
+        } catch {
+            setSubmitError(editingStudent ? 'Erro ao atualizar aluno.' : 'Erro ao criar aluno.');
         } finally {
             setSubmitLoading(false);
         }
     };
 
-    return (
-        <div className="min-h-screen bg-gray-50 p-8">
-            {/* Header Actions */}
-            <div className="flex justify-between items-center mb-6">
-                <p className="text-slate-400">Gerencie seus alunos e seus dados de contato.</p>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="btn-primary flex items-center gap-2"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Novo Aluno
-                </button>
-            </div>
+    // ── Delete ───────────────────────────────────────────────
+    const handleDelete = async (id: string) => {
+        setDeleteLoading(true);
+        try {
+            await studentsService.delete(id);
+            setDeletingId(null);
+            setStudents((prev) => prev.filter((s) => s.id !== id));
+        } catch {
+            // silently fail
+        } finally {
+            setDeleteLoading(false);
+        }
+    };
 
-            {/* Loading State */}
-            {loading ? (
-                <div className="flex justify-center py-20">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500"></div>
-                </div>
-            ) : students.length === 0 ? (
-                /* Empty State */
-                <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/5">
-                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
+    // ── Render ───────────────────────────────────────────────
+    return (
+        <div className="min-h-screen bg-gray-50">
+            {/* Header */}
+            <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                        <div>
+                            <h1 className="text-lg font-bold text-gray-900">Alunos</h1>
+                            <p className="text-sm text-gray-500">
+                                {students.length} {students.length === 1 ? 'aluno' : 'alunos'} cadastrados
+                            </p>
+                        </div>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Nenhum aluno cadastrado</h3>
-                    <p className="text-slate-400 mb-6">Comece adicionando seu primeiro aluno.</p>
                     <button
-                        onClick={() => setShowModal(true)}
-                        className="btn-primary inline-flex items-center gap-2"
+                        onClick={openCreateModal}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
                     >
-                        Cadastrar Aluno
+                        <Plus size={16} />
+                        Novo Aluno
                     </button>
                 </div>
-            ) : (
-                /* List */
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                    {students.map((student) => (
-                        <div key={student.id} className="glass-card hover:bg-white/10 transition-colors group relative">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/20">
-                                        {student.full_name[0].toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-white">{student.full_name}</h3>
-                                        <p className="text-xs text-slate-400">Desde {new Date(student.created_at).toLocaleDateString()}</p>
-                                    </div>
-                                </div>
-                                {/* Actions Menu (placeholder) */}
-                                <button className="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-white/10">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                                    </svg>
-                                </button>
-                            </div>
+            </header>
 
-                            <div className="space-y-2 text-sm text-slate-300">
-                                {student.email && (
-                                    <div className="flex items-center gap-2">
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                        {student.email}
-                                    </div>
-                                )}
-                                {student.phone && (
-                                    <div className="flex items-center gap-2">
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                        </svg>
-                                        {student.phone}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Botão Aulas (futuro) */}
-                            <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
-                                <button className="flex-1 py-1.5 px-3 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium text-indigo-300 transition-colors">
-                                    Ver Histórico
-                                </button>
-                                <button className="flex-1 py-1.5 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 rounded-lg text-xs font-medium text-indigo-400 transition-colors">
-                                    Nova Aula
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="glass-card w-full max-w-md animate-in fade-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-white">Novo Aluno</h3>
+            <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+                {/* Search */}
+                <div className="mb-6">
+                    <div className="relative">
+                        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por nome ou email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 text-sm"
+                        />
+                        {searchQuery && (
                             <button
-                                onClick={() => setShowModal(false)}
-                                className="text-slate-400 hover:text-white transition-colors"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-300 hover:text-gray-500"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <X size={14} />
                             </button>
+                        )}
+                    </div>
+                    {searchQuery && (
+                        <p className="text-xs text-gray-400 mt-2 ml-1">
+                            {filtered.length} {filtered.length === 1 ? 'resultado' : 'resultados'} para "{searchQuery}"
+                        </p>
+                    )}
+                </div>
+
+                {/* Loading */}
+                {loading ? (
+                    <div className="flex items-center justify-center py-20">
+                        <Loader2 size={28} className="animate-spin text-indigo-500" />
+                    </div>
+                ) : error ? (
+                    <div className="text-center py-16">
+                        <AlertTriangle size={24} className="text-red-400 mx-auto mb-3" />
+                        <p className="text-red-500 text-sm mb-3">{error}</p>
+                        <button onClick={fetchStudents} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                            Tentar novamente
+                        </button>
+                    </div>
+
+                    /* Empty state */
+                ) : students.length === 0 ? (
+                    <div className="text-center py-16 px-4">
+                        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Users size={28} className="text-indigo-400" />
                         </div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">Nenhum aluno cadastrado</h3>
+                        <p className="text-gray-500 text-sm max-w-sm mx-auto mb-6">
+                            Adicione seus alunos manualmente ou eles serão criados automaticamente ao fazer agendamentos pela sua página pública.
+                        </p>
+                        <button
+                            onClick={openCreateModal}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                        >
+                            <Plus size={16} />
+                            Cadastrar Primeiro Aluno
+                        </button>
+                    </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="label">Nome Completo</label>
-                                <input
-                                    type="text"
-                                    name="full_name"
-                                    required
-                                    className="input-field"
-                                    placeholder="Ex: Ana Souza"
-                                    value={formData.full_name}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
+                    /* No results for search */
+                ) : filtered.length === 0 ? (
+                    <div className="text-center py-16">
+                        <Search size={24} className="text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500 text-sm">Nenhum aluno encontrado para "{searchQuery}"</p>
+                    </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="label">Email</label>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        className="input-field"
-                                        placeholder="ana@email.com"
-                                        value={formData.email}
-                                        onChange={handleInputChange}
-                                    />
+                    /* Student cards */
+                ) : (
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                        {filtered.map((student) => (
+                            <div
+                                key={student.id}
+                                className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all p-5"
+                            >
+                                {/* Top: Avatar + Name */}
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                            {student.full_name[0]?.toUpperCase() || '?'}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="font-semibold text-gray-900 truncate">{student.full_name}</h3>
+                                            <p className="text-xs text-gray-400">
+                                                Desde {new Date(student.created_at).toLocaleDateString('pt-BR')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            onClick={() => openEditModal(student)}
+                                            className="p-2 rounded-lg text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                            title="Editar"
+                                        >
+                                            <Pencil size={15} />
+                                        </button>
+                                        <button
+                                            onClick={() => setDeletingId(student.id)}
+                                            className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Excluir"
+                                        >
+                                            <Trash2 size={15} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="label">Telefone</label>
-                                    <input
-                                        type="text"
-                                        name="phone"
-                                        className="input-field"
-                                        placeholder="(11) 99999-9999"
-                                        value={formData.phone}
-                                        onChange={handleInputChange}
-                                    />
+
+                                {/* Contact info */}
+                                <div className="space-y-1.5 text-sm text-gray-600">
+                                    {student.email && (
+                                        <div className="flex items-center gap-2">
+                                            <Mail size={13} className="text-gray-400 shrink-0" />
+                                            <span className="truncate">{student.email}</span>
+                                        </div>
+                                    )}
+                                    {student.phone && (
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={13} className="text-gray-400 shrink-0" />
+                                            <span>{student.phone}</span>
+                                        </div>
+                                    )}
+                                    {student.notes && (
+                                        <div className="flex items-start gap-2 mt-2">
+                                            <StickyNote size={13} className="text-gray-400 shrink-0 mt-0.5" />
+                                            <p className="text-xs text-gray-500 line-clamp-2">{student.notes}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+                        ))}
+                    </div>
+                )}
+            </main>
 
-                            <div>
-                                <label className="label">Observações</label>
-                                <textarea
-                                    name="notes"
-                                    className="input-field min-h-[100px]"
-                                    placeholder="Ex: Nível intermediário, prefere aulas à noite..."
-                                    value={formData.notes}
-                                    onChange={handleInputChange}
-                                />
+            {/* ══════════════════════════════════════════════════════
+           DELETE CONFIRMATION MODAL
+         ══════════════════════════════════════════════════════ */}
+            {deletingId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeletingId(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+                        <div className="text-center">
+                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Trash2 size={20} className="text-red-500" />
                             </div>
-
-                            <div className="flex gap-3 mt-6 pt-4 border-t border-white/5">
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Excluir Aluno?</h3>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Essa ação não pode ser desfeita. O aluno será removido permanentemente.
+                            </p>
+                            <div className="flex gap-3">
                                 <button
-                                    type="button"
-                                    onClick={() => setShowModal(false)}
-                                    className="flex-1 btn-ghost justify-center"
+                                    onClick={() => setDeletingId(null)}
+                                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                                 >
                                     Cancelar
                                 </button>
                                 <button
-                                    type="submit"
-                                    disabled={submitLoading}
-                                    className="flex-1 btn-primary justify-center"
+                                    onClick={() => handleDelete(deletingId)}
+                                    disabled={deleteLoading}
+                                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
                                 >
-                                    {submitLoading ? 'Salvando...' : 'Salvar Aluno'}
+                                    {deleteLoading ? (
+                                        <Loader2 size={16} className="animate-spin mx-auto" />
+                                    ) : (
+                                        'Excluir'
+                                    )}
                                 </button>
                             </div>
-                        </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════
+           CREATE / EDIT MODAL
+         ══════════════════════════════════════════════════════ */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
+                    <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+                        {/* Gradient bar */}
+                        <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
+
+                        <div className="p-6 sm:p-8">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                                        <User size={20} className="text-indigo-500" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900">
+                                        {editingStudent ? 'Editar Aluno' : 'Novo Aluno'}
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={closeModal}
+                                    className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {submitError && (
+                                <div className="mb-4 bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl border border-red-200">
+                                    ⚠️ {submitError}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                {/* Name */}
+                                <div>
+                                    <label htmlFor="st-name" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                        Nome Completo <span className="text-red-400">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            id="st-name"
+                                            type="text"
+                                            name="full_name"
+                                            required
+                                            value={formData.full_name}
+                                            onChange={handleInputChange}
+                                            className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900"
+                                            placeholder="Ana Souza"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Email + Phone */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="st-email" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                            Email
+                                        </label>
+                                        <div className="relative">
+                                            <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                            <input
+                                                id="st-email"
+                                                type="email"
+                                                name="email"
+                                                value={formData.email}
+                                                onChange={handleInputChange}
+                                                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900"
+                                                placeholder="ana@email.com"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="st-phone" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                            Telefone
+                                        </label>
+                                        <div className="relative">
+                                            <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                            <input
+                                                id="st-phone"
+                                                type="tel"
+                                                name="phone"
+                                                value={formData.phone}
+                                                onChange={handleInputChange}
+                                                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900"
+                                                placeholder="(11) 99999-9999"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Notes */}
+                                <div>
+                                    <label htmlFor="st-notes" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                        Observações
+                                    </label>
+                                    <div className="relative">
+                                        <StickyNote size={16} className="absolute left-4 top-4 text-gray-400" />
+                                        <textarea
+                                            id="st-notes"
+                                            name="notes"
+                                            rows={3}
+                                            value={formData.notes}
+                                            onChange={handleInputChange}
+                                            className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 resize-none"
+                                            placeholder="Nível intermediário, prefere aulas à noite..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        className="flex-1 px-4 py-3 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={submitLoading}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm shadow-indigo-200"
+                                    >
+                                        {submitLoading ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <Save size={16} />
+                                        )}
+                                        {submitLoading ? 'Salvando...' : editingStudent ? 'Atualizar' : 'Salvar'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
