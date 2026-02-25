@@ -6,6 +6,7 @@
  */
 import axios from 'axios';
 import { Service } from '../types/services';
+import type { SlotsResponse } from '../types/availability';
 
 const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1`;
 
@@ -59,6 +60,22 @@ export async function fetchPublicServices(professionalId: string): Promise<Servi
 /** Busca o perfil público do profissional pelo slug. */
 export async function fetchPublicProfile(slug: string): Promise<PublicProfile> {
     const response = await publicApi.get<PublicProfile>(`/public/profile/${slug}`);
+    return response.data;
+}
+
+/** Busca slots disponíveis para um dia (sem auth). */
+export async function fetchPublicSlots(
+    professionalId: string,
+    date: string,
+    serviceId: string,
+): Promise<SlotsResponse> {
+    const response = await publicApi.get<SlotsResponse>('/availabilities/public/slots', {
+        params: {
+            professional_id: professionalId,
+            date,
+            service_id: serviceId,
+        },
+    });
     return response.data;
 }
 
