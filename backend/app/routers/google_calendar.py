@@ -4,7 +4,7 @@ Router para integração com Google Calendar
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from app.core.security import get_current_user
+from app.core.dependencies import get_current_user
 from app.services.google_calendar_service import google_calendar_service
 import logging
 

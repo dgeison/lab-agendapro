@@ -1,97 +1,235 @@
+/**
+ * LoginPage — Página de Login e Cadastro com toggle.
+ *
+ * Usa supabase.auth.signInWithPassword() e supabase.auth.signUp()
+ * via AuthContext. Alterna entre modo "Entrar" e "Criar Conta".
+ */
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
+type AuthMode = 'login' | 'signup';
+
 const LoginPage: React.FC = () => {
+  const { signIn, signUp, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  // Se já está autenticado, redireciona
+  if (isAuthenticated) {
+    navigate('/dashboard', { replace: true });
+    return null;
+  }
+
+  const resetMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
+  const toggleMode = () => {
+    setMode((prev) => (prev === 'login' ? 'signup' : 'login'));
+    resetMessages();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    resetMessages();
     setLoading(true);
+
     try {
-      await login({ email, password });
-      navigate('/dashboard');
+      if (mode === 'login') {
+        await signIn(email, password);
+        navigate('/dashboard');
+      } else {
+        if (!fullName.trim()) {
+          setError('Nome completo é obrigatório.');
+          setLoading(false);
+          return;
+        }
+        const message = await signUp(email, password, fullName);
+        setSuccess(message);
+
+        // Se foi criado e logou automaticamente (sem exigir confirmação de email)
+        if (!message.includes('Verifique')) {
+          setTimeout(() => navigate('/dashboard'), 1500);
+        }
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Email ou senha incorretos');
+      setError(err.message || 'Ocorreu um erro. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Background gradients */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-indigo-950/30 to-slate-950" />
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
+  const isLogin = mode === 'login';
 
-      <div className="relative w-full max-w-md px-6">
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 px-4">
+      <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-indigo-600 rounded-2xl mb-4 shadow-lg shadow-indigo-600/30">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white">AgendaPro</h1>
-          <p className="text-slate-400 text-sm mt-1">Gestão de aulas simplificada</p>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-indigo-700 tracking-tight">
+            📅 AgendaPro
+          </h1>
+          <p className="text-gray-500 mt-2">
+            {isLogin ? 'Acesse sua conta' : 'Crie sua conta gratuitamente'}
+          </p>
         </div>
 
         {/* Card */}
-        <div className="glass-card">
-          <h2 className="text-xl font-semibold text-white mb-6">Entrar na conta</h2>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          {/* Toggle Tabs */}
+          <div className="flex border-b border-gray-100">
+            <button
+              type="button"
+              onClick={() => { setMode('login'); resetMessages(); }}
+              className={`flex-1 py-3.5 text-sm font-medium transition-colors ${isLogin
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-400 hover:text-gray-600'
+                }`}
+            >
+              Entrar
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('signup'); resetMessages(); }}
+              className={`flex-1 py-3.5 text-sm font-medium transition-colors ${!isLogin
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-400 hover:text-gray-600'
+                }`}
+            >
+              Criar Conta
+            </button>
+          </div>
 
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm mb-5">
-              {error}
-            </div>
-          )}
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+            {/* Error Alert */}
+            {error && (
+              <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-lg border border-red-200 flex items-start gap-2">
+                <span className="shrink-0 mt-0.5">⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Success Alert */}
+            {success && (
+              <div className="bg-green-50 text-green-700 text-sm px-4 py-3 rounded-lg border border-green-200 flex items-start gap-2">
+                <span className="shrink-0 mt-0.5">✅</span>
+                <span>{success}</span>
+              </div>
+            )}
+
+            {/* Full Name (signup only) */}
+            {!isLogin && (
+              <div>
+                <label
+                  htmlFor="fullName"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                >
+                  Nome Completo
+                </label>
+                <input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required={!isLogin}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  placeholder="Seu nome completo"
+                  autoComplete="name"
+                />
+              </div>
+            )}
+
+            {/* Email */}
             <div>
-              <label className="label">Email</label>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1.5"
+              >
+                Email
+              </label>
               <input
                 id="email"
                 type="email"
-                required
-                className="input-field"
-                placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                placeholder="seu@email.com"
+                autoComplete="email"
               />
             </div>
+
+            {/* Password */}
             <div>
-              <label className="label">Senha</label>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1.5"
+              >
+                Senha
+              </label>
               <input
                 id="password"
                 type="password"
-                required
-                className="input-field"
-                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                placeholder="••••••••"
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
+              {!isLogin && (
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Mínimo de 6 caracteres
+                </p>
+              )}
             </div>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
-              {loading ? 'Entrando...' : 'Entrar'}
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading
+                ? isLogin
+                  ? 'Entrando...'
+                  : 'Criando conta...'
+                : isLogin
+                  ? 'Entrar'
+                  : 'Criar Conta'}
             </button>
           </form>
 
-          <p className="text-center text-slate-500 text-sm mt-6">
-            Não tem conta?{' '}
-            <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
-              Criar conta grátis
-            </Link>
-          </p>
+          {/* Footer toggle */}
+          <div className="px-8 pb-6 text-center">
+            <p className="text-sm text-gray-500">
+              {isLogin ? 'Não tem conta?' : 'Já tem conta?'}{' '}
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="text-indigo-600 font-medium hover:underline"
+              >
+                {isLogin ? 'Criar conta' : 'Entrar'}
+              </button>
+            </p>
+          </div>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-400 mt-6">
+          Powered by AgendaPro
+        </p>
       </div>
     </div>
   );

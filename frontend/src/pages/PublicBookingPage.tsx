@@ -1,507 +1,229 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * PublicBookingPage — Vitrine pública do professor.
+ *
+ * Rota: /book/:professional_id
+ * Sem autenticação — qualquer pessoa pode acessar.
+ *
+ * Exibe os serviços ativos do professor e permite
+ * que o aluno solicite um agendamento via BookingModal.
+ */
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { appointmentsService } from '../services/appointmentsService';
-import { PublicProfile, TimeSlot, AppointmentCreate } from '../types/appointments';
 import { Service } from '../types/services';
+import { fetchPublicServices } from '../services/publicApi';
+import BookingModal from '../components/BookingModal';
+import { Clock, DollarSign, Loader2, CalendarCheck, Sparkles } from 'lucide-react';
 
+// ─── Helpers ────────────────────────────────────────────────
+const formatPrice = (price: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+
+const formatDuration = (minutes: number) => {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}min`;
+};
+
+// ─── Componente Principal ───────────────────────────────────
 const PublicBookingPage: React.FC = () => {
-  const { slug } = useParams<{ slug: string }>();
-  
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const { professional_id } = useParams<{ professional_id: string }>();
+
   const [services, setServices] = useState<Service[]>([]);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [clientData, setClientData] = useState({
-    name: '',
-    email: ''
-  });
-  
   const [loading, setLoading] = useState(true);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState<'service' | 'datetime' | 'details' | 'confirmation'>('service');
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
 
-  useEffect(() => {
-    if (slug) {
-      loadPublicData();
-    }
-  }, [slug]);
-
-  useEffect(() => {
-    if (selectedService && selectedDate) {
-      loadAvailableSlots();
-    }
-  }, [selectedService, selectedDate]);
-
-  const loadPublicData = async () => {
+  // ── Carregar serviços ──────────────────────────────────────
+  const loadServices = useCallback(async () => {
+    if (!professional_id) return;
     try {
       setLoading(true);
       setError('');
-      
-      // Buscar perfil e serviços em paralelo
-      const [profileData, servicesData] = await Promise.all([
-        appointmentsService.getPublicProfile(slug!),
-        appointmentsService.getPublicServices(slug!)
-      ]);
-      
-      setProfile(profileData);
-      setServices(servicesData);
-    } catch (err: any) {
-      setError('Profissional não encontrado ou indisponível');
-      console.error('Erro ao carregar dados públicos:', err);
+      const data = await fetchPublicServices(professional_id);
+      setServices(data);
+    } catch {
+      setError('Profissional não encontrado ou sem serviços disponíveis.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [professional_id]);
 
-  const loadAvailableSlots = async () => {
-    if (!selectedService || !selectedDate) return;
-    
-    try {
-      setSlotsLoading(true);
-      const slots = await appointmentsService.getAvailableSlots(selectedService.id, selectedDate);
-      setAvailableSlots(slots);
-    } catch (err) {
-      console.error('Erro ao carregar horários:', err);
-      setAvailableSlots([]);
-    } finally {
-      setSlotsLoading(false);
-    }
-  };
+  useEffect(() => {
+    loadServices();
+  }, [loadServices]);
 
-  const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    setSelectedSlot(null);
-    setStep('datetime');
-  };
 
-  const handleSlotSelect = (slot: TimeSlot) => {
-    setSelectedSlot(slot);
-    setStep('details');
-  };
 
-  const handleBooking = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedService || !selectedSlot || !clientData.name || !clientData.email) {
-      setError('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    try {
-      setBooking(true);
-      setError('');
-
-      const appointmentData: AppointmentCreate = {
-        service_id: selectedService.id,
-        client_name: clientData.name,
-        client_email: clientData.email,
-        start_time: selectedSlot.start,
-        end_time: selectedSlot.end
-      };
-
-      const appointment = await appointmentsService.createAppointment(appointmentData);
-      
-      setStep('confirmation');
-      
-      // Aqui integraria com Stripe para pagamento
-      // Por enquanto, simula confirmação
-      console.log('Agendamento criado:', appointment);
-      
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao criar agendamento');
-    } finally {
-      setBooking(false);
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('pt-BR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const formatTime = (timeStr: string) => {
-    return new Date(timeStr).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(price);
-  };
-
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) {
-      return `${minutes} min`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    if (remainingMinutes === 0) {
-      return `${hours}h`;
-    }
-    return `${hours}h ${remainingMinutes}min`;
-  };
-
-  // Gerar próximos 30 dias úteis
-  const getAvailableDates = () => {
-    const dates = [];
-    const today = new Date();
-    
-    for (let i = 1; i <= 30; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      // Pular fins de semana (opcional)
-      if (date.getDay() !== 0 && date.getDay() !== 6) {
-        dates.push(date.toISOString().split('T')[0]);
-      }
-    }
-    
-    return dates;
-  };
-
+  // ── Loading ────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50/30">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 animate-pulse" />
+            <Loader2 size={24} className="absolute inset-0 m-auto text-white animate-spin" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">Carregando serviços...</p>
         </div>
       </div>
     );
   }
 
-  if (error && !profile) {
+  // ── Error ──────────────────────────────────────────────────
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="text-red-500 text-xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Oops!</h2>
-          <p className="text-gray-600">{error}</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-red-50/30 px-4">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">😕</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            Oops! Algo deu errado
+          </h2>
+          <p className="text-gray-500 leading-relaxed mb-6">{error}</p>
+          <button
+            onClick={loadServices}
+            className="px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
+          >
+            Tentar Novamente
+          </button>
         </div>
       </div>
     );
   }
 
+  // ── Main ───────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.full_name}
-                  className="w-20 h-20 rounded-full object-cover"
-                />
-              ) : (
-                <span className="text-2xl font-bold text-primary-600">
-                  {profile?.full_name?.charAt(0).toUpperCase()}
-                </span>
-              )}
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900">{profile?.full_name}</h1>
-            <p className="text-gray-600 mt-2">Agende seu horário de forma rápida e segura</p>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30">
+      {/* ── Hero Header ────────────────────────────────────── */}
+      <header className="relative overflow-hidden">
+        {/* Background pattern */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700" />
+        <div className="absolute inset-0 opacity-10" style={{
+          backgroundImage: 'radial-gradient(circle at 25% 50%, white 1px, transparent 1px)',
+          backgroundSize: '24px 24px'
+        }} />
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center mb-8">
-          <div className="flex space-x-4">
-            <div className={`flex items-center ${step === 'service' ? 'text-primary-600' : step === 'datetime' || step === 'details' || step === 'confirmation' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'service' ? 'bg-primary-600 text-white' : step === 'datetime' || step === 'details' || step === 'confirmation' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
-                1
-              </div>
-              <span className="ml-2 text-sm font-medium">Serviço</span>
-            </div>
-            
-            <div className={`w-8 h-px bg-gray-300 mt-4 ${step === 'datetime' || step === 'details' || step === 'confirmation' ? 'bg-green-600' : ''}`}></div>
-            
-            <div className={`flex items-center ${step === 'datetime' ? 'text-primary-600' : step === 'details' || step === 'confirmation' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'datetime' ? 'bg-primary-600 text-white' : step === 'details' || step === 'confirmation' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <span className="ml-2 text-sm font-medium">Data/Hora</span>
-            </div>
-            
-            <div className={`w-8 h-px bg-gray-300 mt-4 ${step === 'details' || step === 'confirmation' ? 'bg-green-600' : ''}`}></div>
-            
-            <div className={`flex items-center ${step === 'details' ? 'text-primary-600' : step === 'confirmation' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'details' ? 'bg-primary-600 text-white' : step === 'confirmation' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
-                3
-              </div>
-              <span className="ml-2 text-sm font-medium">Dados</span>
-            </div>
+        <div className="relative max-w-3xl mx-auto px-4 py-10 sm:py-14 text-center">
+          {/* Branding */}
+          <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm text-white/90 text-sm font-medium px-4 py-2 rounded-full mb-6">
+            <Sparkles size={14} />
+            AgendaPro
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            Agende seu horário
+          </h1>
+          <p className="text-white/70 mt-3 text-base sm:text-lg max-w-md mx-auto">
+            Escolha um serviço abaixo e selecione o melhor horário para você
+          </p>
+
+          {/* Stats pill */}
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white/80 text-sm px-4 py-2 rounded-full mt-6">
+            <CalendarCheck size={15} />
+            {services.length} serviço{services.length !== 1 ? 's' : ''} disponíve{services.length !== 1 ? 'is' : 'l'}
           </div>
         </div>
 
-        {/* Step 1: Select Service */}
-        {step === 'service' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Escolha o serviço</h2>
-            
-            {services.length === 0 ? (
-              <p className="text-gray-600 text-center py-8">
-                Nenhum serviço disponível no momento.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {services.map((service) => (
-                  <div
-                    key={service.id}
-                    onClick={() => handleServiceSelect(service)}
-                    className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-primary-300 hover:bg-primary-50 transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{service.name}</h3>
-                        {service.description && (
-                          <p className="text-gray-600 text-sm mt-1">{service.description}</p>
-                        )}
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className="text-sm text-gray-500">
-                            ⏱️ {formatDuration(service.duration_minutes)}
-                          </span>
-                          <span className="text-lg font-semibold text-primary-600">
-                            {formatPrice(service.price)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-primary-600">
-                        →
+        {/* Wave divider */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
+            <path
+              d="M0 60V20C240 50 480 0 720 20C960 40 1200 10 1440 30V60H0Z"
+              className="fill-slate-50"
+            />
+          </svg>
+        </div>
+      </header>
+
+      {/* ── Services Grid ──────────────────────────────────── */}
+      <main className="max-w-3xl mx-auto px-4 py-8 sm:py-12 -mt-2">
+        {services.length === 0 ? (
+          /* Empty */
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <span className="text-4xl">📋</span>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">
+              Nenhum serviço disponível
+            </h3>
+            <p className="text-gray-500 max-w-sm mx-auto">
+              Este profissional ainda não publicou seus serviços.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {services.map((service, index) => (
+              <div
+                key={service.id}
+                className="group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:border-emerald-200/60 transition-all duration-300"
+                style={{ animationDelay: `${index * 80}ms` }}
+              >
+                <div className="p-6 sm:p-7">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+                    {/* Left: info */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">
+                        {service.name}
+                      </h3>
+
+                      {service.description && (
+                        <p className="text-sm text-gray-500 mt-2 leading-relaxed line-clamp-2">
+                          {service.description}
+                        </p>
+                      )}
+
+                      {/* Meta chips */}
+                      <div className="flex items-center gap-3 mt-4">
+                        <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
+                          <Clock size={14} className="text-teal-500" />
+                          {formatDuration(service.duration_minutes)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                          <DollarSign size={14} className="text-emerald-500" />
+                          {formatPrice(service.price)}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* Step 2: Select Date and Time */}
-        {step === 'datetime' && selectedService && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Escolha data e horário</h2>
-              <button
-                onClick={() => setStep('service')}
-                className="text-primary-600 hover:text-primary-700 text-sm"
-              >
-                ← Voltar
-              </button>
-            </div>
-
-            {/* Selected Service Summary */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h3 className="font-medium text-gray-900">{selectedService.name}</h3>
-              <div className="flex items-center space-x-4 mt-1">
-                <span className="text-sm text-gray-600">
-                  {formatDuration(selectedService.duration_minutes)}
-                </span>
-                <span className="text-sm font-medium text-primary-600">
-                  {formatPrice(selectedService.price)}
-                </span>
-              </div>
-            </div>
-
-            {/* Date Selection */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Selecione uma data:
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {getAvailableDates().slice(0, 8).map((date) => (
-                  <button
-                    key={date}
-                    onClick={() => setSelectedDate(date)}
-                    className={`p-3 text-sm rounded-lg border transition-colors ${
-                      selectedDate === date
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    {new Date(date).toLocaleDateString('pt-BR', {
-                      weekday: 'short',
-                      day: '2-digit',
-                      month: '2-digit'
-                    })}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Time Slots */}
-            {selectedDate && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Horários disponíveis para {formatDate(selectedDate)}:
-                </label>
-                
-                {slotsLoading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-                    <p className="mt-2 text-gray-600">Carregando horários...</p>
-                  </div>
-                ) : availableSlots.length === 0 ? (
-                  <p className="text-gray-600 text-center py-8">
-                    Nenhum horário disponível para esta data.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                    {availableSlots.filter(slot => slot.available).map((slot) => (
+                    {/* Right: CTA */}
+                    <div className="sm:ml-6 shrink-0">
                       <button
-                        key={slot.start}
-                        onClick={() => handleSlotSelect(slot)}
-                        className="p-2 text-sm rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
+                        onClick={() => setSelectedService(service)}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3.5 rounded-xl font-semibold hover:from-emerald-700 hover:to-teal-700 focus:ring-4 focus:ring-teal-200 transition-all shadow-lg shadow-emerald-200/40 group-hover:shadow-emerald-300/50 text-sm"
                       >
-                        {formatTime(slot.start)}
+                        <CalendarCheck size={18} />
+                        Selecionar Horário
                       </button>
-                    ))}
+                    </div>
                   </div>
-                )}
+                </div>
+
+                {/* Hover accent line */}
+                <div className="h-0.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
               </div>
-            )}
+            ))}
           </div>
         )}
 
-        {/* Step 3: Client Details */}
-        {step === 'details' && selectedService && selectedSlot && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Seus dados</h2>
-              <button
-                onClick={() => setStep('datetime')}
-                className="text-primary-600 hover:text-primary-700 text-sm"
-              >
-                ← Voltar
-              </button>
-            </div>
-
-            {/* Booking Summary */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h3 className="font-medium text-gray-900 mb-2">Resumo do agendamento:</h3>
-              <div className="space-y-1 text-sm">
-                <p><span className="text-gray-600">Serviço:</span> {selectedService.name}</p>
-                <p><span className="text-gray-600">Data:</span> {formatDate(selectedSlot.start)}</p>
-                <p><span className="text-gray-600">Horário:</span> {formatTime(selectedSlot.start)} - {formatTime(selectedSlot.end)}</p>
-                <p><span className="text-gray-600">Valor:</span> <span className="font-medium text-primary-600">{formatPrice(selectedService.price)}</span></p>
-              </div>
-            </div>
-
-            {/* Client Form */}
-            <form onSubmit={handleBooking}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nome completo *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={clientData.name}
-                    onChange={(e) => setClientData({ ...clientData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Seu nome completo"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={clientData.email}
-                    onChange={(e) => setClientData({ ...clientData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="seu@email.com"
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                  <p className="text-red-700 text-sm">{error}</p>
-                </div>
-              )}
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={booking}
-                  className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-md font-medium disabled:opacity-50"
-                >
-                  {booking ? 'Processando...' : 'Confirmar Agendamento'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Step 4: Confirmation */}
-        {step === 'confirmation' && (
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="text-green-500 text-6xl mb-4">✅</div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-              Agendamento realizado com sucesso!
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Você receberá uma confirmação por email em breve.
-            </p>
-            
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-              <h3 className="font-medium text-gray-900 mb-2">Detalhes do agendamento:</h3>
-              <div className="space-y-1 text-sm">
-                <p><span className="text-gray-600">Profissional:</span> {profile?.full_name}</p>
-                <p><span className="text-gray-600">Serviço:</span> {selectedService?.name}</p>
-                <p><span className="text-gray-600">Data:</span> {selectedSlot && formatDate(selectedSlot.start)}</p>
-                <p><span className="text-gray-600">Horário:</span> {selectedSlot && formatTime(selectedSlot.start)} - {selectedSlot && formatTime(selectedSlot.end)}</p>
-                <p><span className="text-gray-600">Cliente:</span> {clientData.name}</p>
-                <p><span className="text-gray-600">Email:</span> {clientData.email}</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setStep('service');
-                setSelectedService(null);
-                setSelectedSlot(null);
-                setClientData({ name: '', email: '' });
-                setSelectedDate('');
-              }}
-              className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-md"
-            >
-              Fazer Novo Agendamento
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-gray-100 border-t">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center text-gray-600 text-sm">
-            <p>Powered by <span className="font-medium text-primary-600">AgendaPro</span></p>
-          </div>
+        {/* Footer */}
+        <div className="text-center mt-12 pb-6">
+          <p className="text-xs text-gray-400">
+            Powered by{' '}
+            <span className="font-semibold text-emerald-600">AgendaPro</span>
+          </p>
         </div>
-      </footer>
+      </main>
+
+      {/* ── Booking Modal ──────────────────────────────────── */}
+      {selectedService && professional_id && (
+        <BookingModal
+          service={selectedService}
+          professionalId={professional_id}
+          onClose={() => setSelectedService(null)}
+        />
+      )}
     </div>
   );
 };

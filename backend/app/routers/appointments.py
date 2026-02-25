@@ -1,49 +1,101 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends
-from app.schemas.appointments import AppointmentCreate, AppointmentResponse, TimeSlot
-from app.services.appointments_service import (
-    get_available_slots,
-    create_appointment,
-    confirm_payment
-)
-from app.core.security import get_current_user
-import logging
+"""
+Router de Agendamentos (Appointments).
 
-logger = logging.getLogger(__name__)
+Contém rotas públicas (aluno agendando) e privadas (professor gerenciando).
+"""
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
+from supabase import Client
+
+from app.core.dependencies import get_current_user, get_supabase_client
+from app.schemas.user import UserPayload
+from app.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentResponse,
+    AppointmentStatusUpdate,
+)
+from app.services.appointment_logic import (
+    create_public_appointment,
+    list_appointments,
+    get_appointment,
+    update_appointment_status,
+)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 
-# Endpoints públicos (sem autenticação)
-@router.get("/available-slots/{service_id}/{date}", response_model=List[TimeSlot])
-async def get_service_available_slots(service_id: str, date: str):
-    """Buscar horários disponíveis para um serviço em uma data específica."""
-    logger.info(f"Buscando horários disponíveis para serviço {service_id} na data {date}")
-    return await get_available_slots(service_id, date)
+# ---------------------------------------------------------------
+# Rota PÚBLICA (aluno agendando pela Public Booking Page)
+# ---------------------------------------------------------------
+
+@router.post(
+    "/public",
+    response_model=AppointmentResponse,
+    status_code=201,
+    summary="Criar agendamento (público)",
+)
+async def create_public(data: AppointmentCreate):
+    """
+    Cria um novo agendamento a partir da página pública.
+    Não exige autenticação.
+
+    Fluxo:
+    1. Valida horário (start < end)
+    2. Verifica disponibilidade (anti double-booking)
+    3. Cria agendamento com status 'pending'
+    4. Dispara evento no Google Calendar (mock)
+    """
+    return await create_public_appointment(data)
 
 
-@router.post("/", response_model=AppointmentResponse)
-async def create_new_appointment(appointment_data: AppointmentCreate):
-    """Criar novo agendamento (público)."""
-    logger.info(f"Criando agendamento público para serviço {appointment_data.service_id}")
-    return await create_appointment(appointment_data)
+# ---------------------------------------------------------------
+# Rotas PROTEGIDAS (professor autenticado)
+# ---------------------------------------------------------------
+
+@router.get(
+    "/",
+    response_model=List[AppointmentResponse],
+    summary="Listar meus agendamentos",
+)
+async def list_all(
+    status: Optional[str] = Query(
+        None,
+        description="Filtrar por status: pending, confirmed, canceled",
+    ),
+    db: Client = Depends(get_supabase_client),
+    _user: UserPayload = Depends(get_current_user),
+):
+    """Lista todos os agendamentos do profissional autenticado."""
+    return await list_appointments(db, status_filter=status)
 
 
-@router.post("/{appointment_id}/confirm-payment", response_model=AppointmentResponse)
-async def confirm_appointment_payment(appointment_id: str, payment_data: dict):
-    """Confirmar pagamento do agendamento."""
-    logger.info(f"Confirmando pagamento do agendamento {appointment_id}")
-    payment_intent_id = payment_data.get("payment_intent_id")
-    if not payment_intent_id:
-        raise HTTPException(status_code=400, detail="payment_intent_id é obrigatório")
-    
-    return await confirm_payment(appointment_id, payment_intent_id)
+@router.get(
+    "/{appointment_id}",
+    response_model=AppointmentResponse,
+    summary="Buscar agendamento por ID",
+)
+async def get_one(
+    appointment_id: str,
+    db: Client = Depends(get_supabase_client),
+    _user: UserPayload = Depends(get_current_user),
+):
+    """Busca um agendamento específico."""
+    return await get_appointment(db, appointment_id)
 
 
-# Endpoints protegidos (para profissionais)
-@router.get("/my-appointments", response_model=List[AppointmentResponse])
-async def get_my_appointments(current_user: dict = Depends(get_current_user)):
-    """Listar agendamentos do profissional atual."""
-    # TODO: Implementar busca de agendamentos do profissional
-    logger.info(f"Buscando agendamentos do profissional {current_user['id']}")
-    return []
+@router.patch(
+    "/{appointment_id}/status",
+    response_model=AppointmentResponse,
+    summary="Confirmar ou cancelar agendamento",
+)
+async def patch_status(
+    appointment_id: str,
+    data: AppointmentStatusUpdate,
+    db: Client = Depends(get_supabase_client),
+    _user: UserPayload = Depends(get_current_user),
+):
+    """
+    Atualiza o status de um agendamento.
+    Valores permitidos: 'confirmed', 'canceled'.
+    """
+    return await update_appointment_status(db, appointment_id, data)

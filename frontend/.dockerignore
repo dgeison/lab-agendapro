@@ -1,0 +1,32 @@
+# Dependencies (instaladas dentro do container)
+node_modules/
+
+# Build output
+dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*

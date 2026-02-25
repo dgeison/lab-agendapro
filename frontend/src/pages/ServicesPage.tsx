@@ -1,423 +1,528 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * ServicesPage — CRUD completo de Serviços (Tipos de Aula).
+ *
+ * Funcionalidades:
+ *   - Listagem em grid de cards
+ *   - Modal para criar / editar serviço
+ *   - Exclusão com confirmação
+ *   - Loading, empty state e feedback visual
+ *   - Preço formatado em R$ com máscara
+ */
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate, Link } from 'react-router-dom';
 import { servicesService } from '../services/servicesService';
 import { Service, ServiceCreate, ServiceUpdate } from '../types/services';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Clock,
+  DollarSign,
+  ArrowLeft,
+  Loader2,
+  BookOpen,
+  Save,
+  FileText,
+} from 'lucide-react';
 
+// ─── Helpers ────────────────────────────────────────────────
+const formatPrice = (price: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+
+const formatDuration = (minutes: number) => {
+  if (minutes < 60) return `${minutes}min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h${m}min`;
+};
+
+/** Formata centavos inteiros → "1.234,56" */
+const centsToDisplay = (cents: number) => {
+  const value = cents / 100;
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+/** Centavos inteiros → valor decimal para API */
+const centsToDecimal = (cents: number) => cents / 100;
+
+/** Valor decimal da API → centavos inteiros */
+const decimalToCents = (value: number) => Math.round(value * 100);
+
+// ─── Formulário vazio ───────────────────────────────────────
+interface FormState {
+  name: string;
+  description: string;
+  duration_minutes: number;
+  priceCents: number; // armazenamos em centavos para a máscara
+}
+
+const EMPTY_FORM: FormState = {
+  name: '',
+  description: '',
+  duration_minutes: 60,
+  priceCents: 0,
+};
+
+// ── Durations pré-definidas ─────────────────────────────────
+const DURATION_OPTIONS = [30, 45, 60, 90, 120, 180];
+
+// ─── Componente Principal ───────────────────────────────────
 const ServicesPage: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  // Estado da lista
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingService, setEditingService] = useState<Service | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<ServiceCreate>({
-    name: '',
-    description: '',
-    duration_minutes: 60,
-    price: 0
-  });
-  const [editFormData, setEditFormData] = useState<ServiceUpdate>({});
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadServices();
-  }, []);
+  // Estado do modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
 
-  const loadServices = async () => {
+  // Estado de exclusão
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // ── Carregar serviços ──────────────────────────────────────
+  const loadServices = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await servicesService.getMyServices();
       setServices(data);
-    } catch (error) {
-      console.error('Erro ao carregar serviços:', error);
-      setError('Erro ao carregar serviços. Tente novamente.');
+    } catch {
+      setError('Erro ao carregar serviços. Verifique sua conexão.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const showMessage = (message: string, type: 'success' | 'error') => {
+  useEffect(() => {
+    loadServices();
+  }, [loadServices]);
+
+  // ── Mensagens temporárias ──────────────────────────────────
+  const flash = (msg: string, type: 'success' | 'error') => {
     if (type === 'success') {
-      setSuccess(message);
+      setSuccess(msg);
       setError(null);
     } else {
-      setError(message);
+      setError(msg);
       setSuccess(null);
     }
     setTimeout(() => {
       setSuccess(null);
       setError(null);
-    }, 5000);
+    }, 4000);
   };
 
-  const handleCreateService = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await servicesService.createService(formData);
-      setFormData({ name: '', description: '', duration_minutes: 60, price: 0 });
-      setShowCreateForm(false);
-      await loadServices();
-      showMessage('Serviço criado com sucesso!', 'success');
-    } catch (error) {
-      console.error('Erro ao criar serviço:', error);
-      showMessage('Erro ao criar serviço. Tente novamente.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+  // ── Abrir modal (criar ou editar) ──────────────────────────
+  const openCreateModal = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
   };
 
-  const handleDeleteService = async (serviceId: string) => {
-    if (window.confirm('Tem certeza que deseja deletar este serviço?')) {
-      setDeletingId(serviceId);
-      try {
-        await servicesService.deleteService(serviceId);
-        await loadServices();
-        showMessage('Serviço deletado com sucesso!', 'success');
-      } catch (error) {
-        console.error('Erro ao deletar serviço:', error);
-        showMessage('Erro ao deletar serviço. Tente novamente.', 'error');
-      } finally {
-        setDeletingId(null);
-      }
-    }
-  };
-
-  const handleEditService = (service: Service) => {
-    setEditingService(service);
-    setEditFormData({
+  const openEditModal = (service: Service) => {
+    setEditingId(service.id);
+    setForm({
       name: service.name,
       description: service.description || '',
       duration_minutes: service.duration_minutes,
-      price: service.price
+      priceCents: decimalToCents(service.price),
     });
+    setModalOpen(true);
   };
 
-  const handleUpdateService = async (e: React.FormEvent) => {
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  };
+
+  // ── Máscara de preço (input em centavos) ───────────────────
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Remove tudo que não é dígito
+    const raw = e.target.value.replace(/\D/g, '');
+    const cents = parseInt(raw, 10) || 0;
+    setForm({ ...form, priceCents: cents });
+  };
+
+  // ── Submit (criar ou atualizar) ────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingService) return;
-    
+
+    if (!form.name.trim()) return;
+    if (form.priceCents <= 0) {
+      flash('Informe um preço válido.', 'error');
+      return;
+    }
+
     setSubmitting(true);
+
     try {
-      await servicesService.updateService(editingService.id, editFormData);
-      setEditingService(null);
-      setEditFormData({});
+      const payload: ServiceCreate = {
+        name: form.name.trim(),
+        description: form.description.trim() || undefined,
+        duration_minutes: form.duration_minutes,
+        price: centsToDecimal(form.priceCents),
+      };
+
+      if (editingId) {
+        const updateData: ServiceUpdate = { ...payload };
+        await servicesService.updateService(editingId, updateData);
+        flash('Serviço atualizado com sucesso!', 'success');
+      } else {
+        await servicesService.createService(payload);
+        flash('Serviço criado com sucesso!', 'success');
+      }
+      closeModal();
       await loadServices();
-      showMessage('Serviço atualizado com sucesso!', 'success');
-    } catch (error) {
-      console.error('Erro ao atualizar serviço:', error);
-      showMessage('Erro ao atualizar serviço. Tente novamente.', 'error');
+    } catch {
+      flash(
+        editingId
+          ? 'Erro ao atualizar serviço.'
+          : 'Erro ao criar serviço. Verifique se o backend está rodando.',
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const cancelEdit = () => {
-    setEditingService(null);
-    setEditFormData({});
-  };
+  // ── Excluir ────────────────────────────────────────────────
+  const handleDelete = async (serviceId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este serviço?')) return;
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(price);
-  };
-
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) {
-      return `${minutes} min`;
+    setDeletingId(serviceId);
+    try {
+      await servicesService.deleteService(serviceId);
+      flash('Serviço excluído com sucesso!', 'success');
+      await loadServices();
+    } catch {
+      flash('Erro ao excluir serviço.', 'error');
+    } finally {
+      setDeletingId(null);
     }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    if (remainingMinutes === 0) {
-      return `${hours}h`;
-    }
-    return `${hours}h ${remainingMinutes}min`;
   };
 
+  // ── Logout ─────────────────────────────────────────────────
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
+  // ── Render ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/60 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/dashboard"
+              className="p-2 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+              title="Voltar ao Dashboard"
+            >
+              <ArrowLeft size={20} />
+            </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Meus Serviços</h1>
-              <p className="text-gray-600">Gerencie os serviços que você oferece</p>
+              <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <BookOpen size={22} className="text-indigo-600" />
+                Meus Serviços
+              </h1>
+              <p className="text-sm text-gray-500">Gerencie seus tipos de aula</p>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Olá, {user?.full_name}</span>
-              <button
-                onClick={logout}
-                className="text-sm text-red-600 hover:text-red-800"
-              >
-                Sair
-              </button>
-            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600 hidden sm:inline">
+              {user?.full_name || user?.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="text-sm text-red-500 hover:text-red-700 font-medium transition-colors"
+            >
+              Sair
+            </button>
           </div>
         </div>
       </header>
 
+      {/* ── Main Content ───────────────────────────────────── */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Mensagens */}
+        {/* Alertas */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
+          <div className="mb-6 bg-red-50 text-red-700 border border-red-200 px-4 py-3 rounded-xl text-sm flex items-center gap-2 animate-in slide-in-from-top-2">
+            <span className="text-lg">⚠️</span> {error}
           </div>
         )}
         {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-            {success}
+          <div className="mb-6 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-3 rounded-xl text-sm flex items-center gap-2 animate-in slide-in-from-top-2">
+            <span className="text-lg">✅</span> {success}
           </div>
         )}
 
-        {/* Botão Criar Serviço */}
-        <div className="mb-6">
+        {/* Toolbar */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <div>
+            <p className="text-sm text-gray-500">
+              {loading ? 'Carregando...' : `${services.length} serviço${services.length !== 1 ? 's' : ''} cadastrado${services.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
           <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition-all text-sm shadow-sm shadow-indigo-200"
           >
-            {showCreateForm ? 'Cancelar' : '+ Novo Serviço'}
+            <Plus size={18} />
+            Novo Serviço
           </button>
         </div>
 
-        {/* Formulário de Criação */}
-        {showCreateForm && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Criar Novo Serviço</h2>
-            <form onSubmit={handleCreateService} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Serviço *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ex: Consulta, Aula particular, etc."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descrição
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Descreva o serviço..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duração (minutos) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="15"
-                    max="480"
-                    value={formData.duration_minutes}
-                    onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço (R$) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {submitting ? 'Criando...' : 'Criar Serviço'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Lista de Serviços */}
+        {/* ── Loading State ──────────────────────────────── */}
         {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando serviços...</p>
+          <div className="flex flex-col items-center justify-center py-24">
+            <Loader2 size={44} className="text-indigo-500 animate-spin" />
+            <p className="mt-4 text-gray-500">Carregando serviços...</p>
           </div>
         ) : services.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-6xl mb-4">🛠️</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum serviço encontrado</h3>
-            <p className="text-gray-600 mb-4">Comece criando seu primeiro serviço</p>
+          /* ── Empty State ─────────────────────────────── */
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl p-8 mb-6">
+              <FileText size={48} className="text-indigo-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">
+              Nenhum serviço cadastrado
+            </h3>
+            <p className="text-gray-500 mb-8 max-w-md leading-relaxed">
+              Crie seu primeiro serviço para que seus alunos possam
+              agendar aulas com você.
+            </p>
             <button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
             >
+              <Plus size={20} />
               Criar Primeiro Serviço
             </button>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          /* ── Grid de Cards ─────────────────────────────── */
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {services.map((service) => (
-              <div key={service.id} className="bg-white rounded-lg shadow-md p-6">
-                {editingService?.id === service.id ? (
-                  /* Formulário de Edição */
-                  <form onSubmit={handleUpdateService} className="space-y-4">
-                    <div>
-                      <input
-                        type="text"
-                        required
-                        value={editFormData.name || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div>
-                      <textarea
-                        value={editFormData.description || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={2}
-                      />
-                    </div>
+              <div
+                key={service.id}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:border-indigo-100 transition-all duration-300 group"
+              >
+                {/* Barra de cor no topo */}
+                <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        required
-                        min="15"
-                        value={editFormData.duration_minutes || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, duration_minutes: parseInt(e.target.value) })}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        step="0.01"
-                        value={editFormData.price || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, price: parseFloat(e.target.value) })}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div className="flex justify-end space-x-2">
+                <div className="p-6">
+                  {/* Título + Ações */}
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-900 leading-snug pr-2">
+                      {service.name}
+                    </h3>
+                    <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <button
-                        type="button"
-                        onClick={cancelEdit}
-                        className="px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                        onClick={() => openEditModal(service)}
+                        className="p-2 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        title="Editar"
                       >
-                        Cancelar
+                        <Pencil size={16} />
                       </button>
                       <button
-                        type="submit"
-                        disabled={submitting}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {submitting ? 'Salvando...' : 'Salvar'}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  /* Visualização do Serviço */
-                  <>
-                    <div className="mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">{service.name}</h3>
-                      {service.description && (
-                        <p className="text-gray-600 text-sm mt-1">{service.description}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Duração:</span>
-                        <span className="font-medium">{formatDuration(service.duration_minutes)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Preço:</span>
-                        <span className="font-medium text-green-600">{formatPrice(service.price)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => handleEditService(service)}
-                        className="px-3 py-1 text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleDeleteService(service.id)}
+                        onClick={() => handleDelete(service.id)}
                         disabled={deletingId === service.id}
-                        className="px-3 py-1 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50"
+                        className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                        title="Excluir"
                       >
-                        {deletingId === service.id ? 'Deletando...' : 'Deletar'}
+                        {deletingId === service.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
                       </button>
                     </div>
-                  </>
-                )}
+                  </div>
+
+                  {/* Descrição */}
+                  {service.description ? (
+                    <p className="text-sm text-gray-500 mb-5 line-clamp-2 leading-relaxed">
+                      {service.description}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-300 italic mb-5">
+                      Sem descrição
+                    </p>
+                  )}
+
+                  {/* Metadados */}
+                  <div className="flex items-center gap-5 pt-4 border-t border-gray-100">
+                    <span className="inline-flex items-center gap-2 text-sm text-gray-600">
+                      <div className="p-1.5 rounded-lg bg-indigo-50">
+                        <Clock size={14} className="text-indigo-500" />
+                      </div>
+                      {formatDuration(service.duration_minutes)}
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600">
+                      <div className="p-1.5 rounded-lg bg-emerald-50">
+                        <DollarSign size={14} className="text-emerald-500" />
+                      </div>
+                      {formatPrice(service.price)}
+                    </span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         )}
-
-        {/* Informações da Página Pública */}
-        {services.length > 0 && (
-          <div className="mt-12 bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-2">
-              Sua Página Pública de Agendamentos
-            </h3>
-            <p className="text-blue-700 mb-3">
-              Compartilhe o link abaixo com seus clientes para que eles possam agendar serviços:
-            </p>
-            <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-sm">
-              {window.location.origin}/public/{user?.public_slug}
-            </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/public/${user?.public_slug}`);
-                showMessage('Link copiado para a área de transferência!', 'success');
-              }}
-              className="mt-3 text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            >
-              Copiar Link
-            </button>
-          </div>
-        )}
       </main>
+
+      {/* ── Modal ──────────────────────────────────────────── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          {/* Overlay */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeModal}
+          />
+
+          {/* Painel */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            {/* Barra decorativa */}
+            <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-purple-500" />
+
+            <div className="p-6 sm:p-8">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingId ? '✏️ Editar Serviço' : '➕ Novo Serviço'}
+                </h2>
+                <button
+                  onClick={closeModal}
+                  className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Nome */}
+                <div>
+                  <label htmlFor="svc-name" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Título do Serviço <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    id="svc-name"
+                    type="text"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900"
+                    placeholder="Ex: Aula de Violão Individual"
+                  />
+                </div>
+
+                {/* Descrição */}
+                <div>
+                  <label htmlFor="svc-desc" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Descrição
+                  </label>
+                  <textarea
+                    id="svc-desc"
+                    rows={3}
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-gray-900"
+                    placeholder="Descreva brevemente o serviço..."
+                  />
+                </div>
+
+                {/* Duração */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Duração <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {DURATION_OPTIONS.map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setForm({ ...form, duration_minutes: d })}
+                        className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all border ${form.duration_minutes === d
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
+                          }`}
+                      >
+                        {formatDuration(d)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preço (Máscara de moeda) */}
+                <div>
+                  <label htmlFor="svc-price" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Preço <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-sm">
+                      R$
+                    </span>
+                    <input
+                      id="svc-price"
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      value={form.priceCents > 0 ? centsToDisplay(form.priceCents) : ''}
+                      onChange={handlePriceChange}
+                      className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 text-lg font-semibold tabular-nums"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Digite apenas números. Ex: 15000 = R$ 150,00
+                  </p>
+                </div>
+
+                {/* Botões */}
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="px-5 py-3 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-indigo-200"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        {editingId ? 'Salvar Alterações' : 'Criar Serviço'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

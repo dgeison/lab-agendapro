@@ -1,0 +1,100 @@
+# ============================================
+# AgendaPro – Docker Compose (Dev Environment)
+# ============================================
+# Uso:
+#   1. cp .env.example .env   (preencha suas credenciais)
+#   2. docker compose up -d
+# ============================================
+
+services:
+  # ------------------------------------------
+  # Backend – FastAPI + Uvicorn (hot-reload)
+  # ------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agendapro-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind mount: hot-reload do Uvicorn detecta alterações no host
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=development
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - agendapro_network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ------------------------------------------
+  # Frontend – React/Vite (hot-reload)
+  # ------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agendapro-frontend
+    ports:
+      - "5174:5174"
+    volumes:
+      # Bind mount: hot-reload do Vite detecta alterações no host
+      - ./frontend:/app
+      # Volume anônimo: preserva node_modules do container (Linux)
+      # evitando sobrescrita pelo file system do WSL/Windows
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      # Polling necessário para hot-reload funcionar no WSL/Docker
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    networks:
+      - agendapro_network
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ------------------------------------------
+  # Redis – Cache e filas assíncronas (Fases A/C)
+  # ------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: agendapro-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agendapro_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# ------------------------------------------
+# Volumes persistentes
+# ------------------------------------------
+volumes:
+  redis_data:
+    driver: local
+
+# ------------------------------------------
+# Rede customizada
+# ------------------------------------------
+networks:
+  agendapro_network:
+    driver: bridge

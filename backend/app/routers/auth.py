@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.auth import UserSignup, UserLogin, AuthResponse, UserResponse
 from app.services.auth_service import signup_user, login_user
-from app.core.security import get_current_user
+from app.core.dependencies import get_current_user
 import logging
 
 # Configurar logging

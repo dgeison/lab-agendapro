@@ -1,3 +1,7 @@
+/**
+ * Tipos do módulo de Serviços (Tipos de Aula).
+ */
+
 export interface Service {
   id: string;
   user_id: string;
@@ -5,6 +9,7 @@ export interface Service {
   description?: string;
   duration_minutes: number;
   price: number;
+  is_active?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -21,4 +26,5 @@ export interface ServiceUpdate {
   description?: string;
   duration_minutes?: number;
   price?: number;
+  is_active?: boolean;
 }

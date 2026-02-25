@@ -29,11 +29,11 @@ const GoogleCallbackPage: React.FC = () => {
         }
 
         // Processar callback
-        const result = await googleCalendarService.handleOAuthCallback(code, state);
-        
+        const result = await googleCalendarService.handleCallback(code, state);
+
         setStatus('success');
         setMessage(`${result.message} - ${result.google_email}`);
-        
+
         // Fechar popup/janela após 2 segundos
         setTimeout(() => {
           window.close();

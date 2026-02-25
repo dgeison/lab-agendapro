@@ -1,3 +1,17 @@
+/**
+ * App.tsx — Configuração principal de rotas.
+ *
+ * Rotas Públicas:
+ *   /login               → LoginPage
+ *   /signup               → SignupPage
+ *   /book/:professional_id → PublicBookingPage
+ *
+ * Rotas Protegidas (ProtectedRoute):
+ *   /dashboard            → DashboardPage
+ *   /alunos               → StudentsPage
+ *   /servicos             → ServicesPage
+ *   /google-calendar      → GoogleCalendarSettingsPage
+ */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -5,11 +19,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
-import StudentsPage from './pages/StudentsPage';
-import { AulasPage, PagamentosPage, RelatoriosPage } from './pages/PlaceholderPages';
-import GoogleCalendarSettingsPage from './pages/GoogleCalendarSettingsPage';
-import GoogleCallbackPage from './pages/GoogleCallbackPage';
 import PublicBookingPage from './pages/PublicBookingPage';
+import StudentsPage from './pages/StudentsPage';
+import ServicesPage from './pages/ServicesPage';
 import './index.css';
 
 const AppRoutes: React.FC = () => {
@@ -17,24 +29,46 @@ const AppRoutes: React.FC = () => {
 
   return (
     <Routes>
+      {/* Raiz → redireciona conforme autenticação */}
       <Route
         path="/"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
+        element={
+          isAuthenticated
+            ? <Navigate to="/dashboard" replace />
+            : <Navigate to="/login" replace />
+        }
       />
+
+      {/* ── Rotas PÚBLICAS ──────────────────────────────── */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route path="/public/:slug" element={<PublicBookingPage />} />
-      <Route path="/book/:slug" element={<PublicBookingPage />} />
-      <Route path="/p/:slug" element={<PublicBookingPage />} />
+      <Route path="/book/:professional_id" element={<PublicBookingPage />} />
 
-      {/* Protected routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/alunos" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
-      <Route path="/aulas" element={<ProtectedRoute><AulasPage /></ProtectedRoute>} />
-      <Route path="/pagamentos" element={<ProtectedRoute><PagamentosPage /></ProtectedRoute>} />
-      <Route path="/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
-      <Route path="/google-calendar" element={<ProtectedRoute><GoogleCalendarSettingsPage /></ProtectedRoute>} />
-      <Route path="/auth/google/callback" element={<ProtectedRoute><GoogleCallbackPage /></ProtectedRoute>} />
+      {/* ── Rotas PROTEGIDAS ────────────────────────────── */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/alunos"
+        element={
+          <ProtectedRoute>
+            <StudentsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/servicos"
+        element={
+          <ProtectedRoute>
+            <ServicesPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 };

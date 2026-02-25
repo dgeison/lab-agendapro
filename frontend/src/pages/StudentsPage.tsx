@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { DashboardLayout } from './DashboardPage';
 import { studentsService, Student, CreateStudentData } from '../services/studentsService';
 
 const StudentsPage: React.FC = () => {
@@ -51,7 +50,7 @@ const StudentsPage: React.FC = () => {
     };
 
     return (
-        <DashboardLayout title="Alunos">
+        <div className="min-h-screen bg-gray-50 p-8">
             {/* Header Actions */}
             <div className="flex justify-between items-center mb-6">
                 <p className="text-slate-400">Gerencie seus alunos e seus dados de contato.</p>
@@ -230,7 +229,7 @@ const StudentsPage: React.FC = () => {
                     </div>
                 </div>
             )}
-        </DashboardLayout>
+        </div>
     );
 };
 
