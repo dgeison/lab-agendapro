@@ -84,24 +84,28 @@ const DashboardPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // ── Fetch appointments ──────────────────────────────────────
+  // ── Fetch appointments (always fetch ALL, filter locally) ──
   const fetchAppointments = useCallback(async () => {
     try {
       setLoadingAppts(true);
       setApptError('');
-      const filter = statusFilter === 'all' ? undefined : statusFilter;
-      const data = await listAppointments(filter);
+      const data = await listAppointments();
       setAppointments(data);
     } catch {
       setApptError('Erro ao carregar agendamentos.');
     } finally {
       setLoadingAppts(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => {
     fetchAppointments();
   }, [fetchAppointments]);
+
+  // ── Local filtering ──────────────────────────────────────────
+  const filteredAppointments = statusFilter === 'all'
+    ? appointments
+    : appointments.filter((a) => a.status === statusFilter);
 
   // ── Actions ─────────────────────────────────────────────────
   const handleCopy = async () => {
@@ -294,7 +298,7 @@ const DashboardPage: React.FC = () => {
                 Tentar novamente
               </button>
             </div>
-          ) : appointments.length === 0 ? (
+          ) : filteredAppointments.length === 0 ? (
             /* Empty State */
             <div className="text-center py-16 px-4">
               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -311,7 +315,7 @@ const DashboardPage: React.FC = () => {
           ) : (
             /* Appointments List */
             <div className="divide-y divide-gray-50">
-              {appointments.map((apt) => (
+              {filteredAppointments.map((apt) => (
                 <div
                   key={apt.id}
                   className="px-5 sm:px-6 py-4 hover:bg-gray-50/50 transition-colors"
