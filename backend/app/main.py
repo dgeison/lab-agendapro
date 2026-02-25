@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import test, services, public, appointments, setup, google_calendar, students
+from app.routers import test, services, public, appointments, setup, google_calendar, students, availabilities
 # NOTA: auth router removido — login/signup agora é feito via Supabase Auth no frontend
 
 # Criar instância do FastAPI
@@ -50,6 +50,7 @@ app.include_router(appointments.router, prefix=settings.api_v1_str)
 app.include_router(setup.router, prefix=settings.api_v1_str)
 app.include_router(google_calendar.router, prefix=settings.api_v1_str)
 app.include_router(students.router, prefix=settings.api_v1_str)
+app.include_router(availabilities.router, prefix=settings.api_v1_str)
 
 
 @app.get("/")
