@@ -10,6 +10,7 @@
  *   /dashboard            → DashboardPage
  *   /alunos               → StudentsPage
  *   /servicos             → ServicesPage
+ *   /expediente           → AvailabilitiesPage
  *   /google-calendar      → GoogleCalendarSettingsPage
  */
 import React from 'react';
@@ -22,6 +23,7 @@ import DashboardPage from './pages/DashboardPage';
 import PublicBookingPage from './pages/PublicBookingPage';
 import StudentsPage from './pages/StudentsPage';
 import ServicesPage from './pages/ServicesPage';
+import AvailabilitiesPage from './pages/AvailabilitiesPage';
 import './index.css';
 
 const AppRoutes: React.FC = () => {
@@ -66,6 +68,14 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <ServicesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/expediente"
+        element={
+          <ProtectedRoute>
+            <AvailabilitiesPage />
           </ProtectedRoute>
         }
       />

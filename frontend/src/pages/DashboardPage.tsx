@@ -184,8 +184,8 @@ const DashboardPage: React.FC = () => {
                 <button
                   onClick={handleCopy}
                   className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${copied
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200'
                     }`}
                 >
                   {copied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar</>}
@@ -235,11 +235,13 @@ const DashboardPage: React.FC = () => {
             <span className="text-2xl">📋</span>
             <p className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 mt-1">Serviços</p>
           </Link>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 opacity-50 text-center">
+          <Link
+            to="/expediente"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-indigo-200 transition-all group text-center"
+          >
             <span className="text-2xl">📅</span>
-            <p className="text-sm font-semibold text-gray-800 mt-1">Agenda</p>
-            <p className="text-xs text-gray-400">Em breve</p>
-          </div>
+            <p className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 mt-1">Expediente</p>
+          </Link>
         </div>
 
         {/* ── Appointments Section ───────────────────────────── */}
@@ -259,8 +261,8 @@ const DashboardPage: React.FC = () => {
                     key={f}
                     onClick={() => setStatusFilter(f)}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${statusFilter === f
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
                       }`}
                   >
                     {f === 'all' ? 'Todos' : f === 'pending' ? 'Pendentes' : f === 'confirmed' ? 'Confirmados' : 'Cancelados'}
